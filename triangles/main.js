@@ -142,13 +142,15 @@ function main() {
     var fieldOfViewRadians = degToRad(60);
 
     var then = 0;
+    var now = 0;
     calc_matrices();
     requestAnimationFrame(drawScene);
 
     // Draw the scene.
-    function drawScene(now) {
+    //function drawScene(now) {
+    function drawScene() {
         // get seconds
-        now *= 0.01;
+        now += 0.2;
         var d_t = now - then;
         then = now;
 
@@ -193,8 +195,6 @@ function main() {
         var count = (num_vert - 1) ** 2 * 2 * 3;
         //var count = 18;
         gl.drawArrays(primitiveType, offset, count);
-
-        console.log('+ scene');
 
         // Call drawScene again next frame
         requestAnimationFrame(drawScene);

@@ -11,9 +11,13 @@ function main() {
 
     // parameters
 
-    var num_vert = 27;
-    var side = 200;
-    var hook_coef_mult = 0.001;
+    const num_vert = 27;
+    const side = 200;
+    const hook_coef_mult = 0.001;
+    const d_t = 0.2;
+    //
+    const n_lines = ((num_vert - 1) ** 2 * 3 + 2 * (num_vert - 1)) * 3;
+    const central_vert = Math.floor((num_vert ** 2 - 1) / 2);
 
     // cloth physics setup
 
@@ -23,9 +27,9 @@ function main() {
 
     // UI parameters
 
-    var fieldOfViewRadians = degToRad(60);
-    var translation = [0, 50, 0];
-    var rotation = [degToRad(180), degToRad(180), degToRad(0)];
+    const fieldOfViewRadians = degToRad(62);
+    var translation = [0, 34, 150];
+    var rotation = [degToRad(180), degToRad(310), degToRad(0)];
     var gravity = [0.0, 0.0, 0.0];
     var dissipation = 0.002;
     var amplitude = 10;
@@ -44,8 +48,7 @@ function main() {
     webglLessonsUI.setupSlider("#amplitude", { value: amplitude, slide: updateAplitude(), max: side / 2 });
     webglLessonsUI.setupSlider("#period", { value: period, slide: updatePeriod(), min: 1, max: 30 });
 
-    // setup UI functions
-
+    // setup UI and utility functions
     function updatePosition(index) {
         return function (event, ui) {
             translation[index] = ui.value;
@@ -81,6 +84,12 @@ function main() {
             period = ui.value;
         }
     }
+    function radToDeg(r) {
+        return r * 180 / Math.PI;
+    }
+    function degToRad(d) {
+        return d * Math.PI / 180;
+    }
 
     // setup GLSL program
     var program = webglUtils.createProgramFromScripts(gl, ["vertex-shader-3d", "fragment-shader-3d"]);
@@ -93,28 +102,9 @@ function main() {
     var worldViewProjectionLocation = gl.getUniformLocation(program, "u_worldViewProjection");
     var worldInverseTransposeLocation = gl.getUniformLocation(program, "u_worldInverseTranspose");
 
-    var geom = get_line_geometry(v_ar, s_ar, num_vert);
-    // Create a buffer to put positions in
+    // Buffers
     var positionBuffer = gl.createBuffer();
-    // Bind it to ARRAY_BUFFER (think of it as ARRAY_BUFFER = positionBuffer)
-    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-    // Put geometry data into buffer
-    var pos = setGeometry(geom.vertices);
-
-    // Create a buffer to put colors in
     var colorBuffer = gl.createBuffer();
-    // Bind it to ARRAY_BUFFER (think of it as ARRAY_BUFFER = colorBuffer)
-    gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
-    // Put color data into buffer
-    setColors(geom.colors);
-
-    function radToDeg(r) {
-        return r * 180 / Math.PI;
-    }
-
-    function degToRad(d) {
-        return d * Math.PI / 180;
-    }
 
     // matrices
     var projectionMatrix = glMatrix.mat4.create();
@@ -123,66 +113,48 @@ function main() {
     var worldViewProjectionMatrix = glMatrix.mat4.create();
     var worldInverseTransposeMatrix = glMatrix.mat4.create();
 
-    var fieldOfViewRadians = degToRad(60);
-
-    var then = 0;
+    var now = 0;
     calc_matrices();
     requestAnimationFrame(drawScene);
 
     // Draw the scene.
-    function drawScene(now) {
-        // get seconds
-        now *= 0.01;
-        var d_t = now - then;
-        then = now;
-
-        // Central point moves on sin
-        var central_vert = Math.floor((num_vert ** 2 - 1) / 2);
-        var centr_x = v_ar[central_vert].pos[0];
-        var centr_z = v_ar[central_vert].pos[2];
-        v_ar[central_vert].move([centr_x, amplitude * Math.sin(now / period), centr_z]);
+    function drawScene() {
+        // Central point movement
+        now += d_t;
+        var c_pos = v_ar[central_vert].pos;
+        v_ar[central_vert].move([c_pos[0], amplitude * Math.sin(now / period), c_pos[2]]);
+        // update cloth state
         ClothUpdate(v_ar, s_ar, d_t);
-
+        // calculate webGL new data
+        reset_webGL();
+        set_buffers();
+        set_matrices();
+        // draw
+        gl.drawArrays(gl.LINES, 0, n_lines);
+        // next scene
+        requestAnimationFrame(drawScene);
+    }
+    // ???
+    function reset_webGL() {
         webglUtils.resizeCanvasToDisplaySize(gl.canvas);
-
-        // Tell WebGL how to convert from clip space to pixels
         gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
-
-        // Clear the canvas AND the depth buffer.
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-
-        // Turn on culling. By default backfacing triangles
-        // will be culled.
         gl.enable(gl.CULL_FACE);
-
-        // Enable the depth buffer
         gl.enable(gl.DEPTH_TEST);
 
-        // Tell it to use our program (pair of shaders)
         gl.useProgram(program);
-
-        set_buffers();
-
-        // Set the matrices
+    }
+    // set uniform matrices
+    function set_matrices() {
         gl.uniformMatrix4fv(worldViewProjectionLocation, false, worldViewProjectionMatrix);
         gl.uniformMatrix4fv(worldInverseTransposeLocation, false, worldInverseTransposeMatrix);
-
-        // Draw the geometry.
-        var primitiveType = gl.LINES;
-        var offset = 0;
-        var count = ((num_vert - 1) ** 2 * 3 + 2 * (num_vert - 1)) * 3;
-        //var count = 18;
-        gl.drawArrays(primitiveType, offset, count);
-
-        // Call drawScene again next frame
-        requestAnimationFrame(drawScene);
     }
     // calculate reltions matrices
     function calc_matrices() {
         // Compute the projection matrix
         var aspect = gl.canvas.clientWidth / gl.canvas.clientHeight;
         var zNear = 1;
-        var zFar = 1000;
+        var zFar = 600;
         glMatrix.mat4.perspectiveNO(projectionMatrix, fieldOfViewRadians, aspect, zNear, zFar);
 
         // Compute the view projection matrix
@@ -208,60 +180,17 @@ function main() {
     function set_buffers() {
         var geom = get_line_geometry(v_ar, s_ar, num_vert);
 
-        // Turn on the position attribute
+        // Position attribute from buffer
         gl.enableVertexAttribArray(positionLocation);
-        // Bind the position buffer.
         gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-        var pos = setGeometry(geom.vertices);
-        // Tell the position attribute how to get data out of positionBuffer (ARRAY_BUFFER)
-        var size = 3;          // 3 components per iteration
-        var type = gl.FLOAT;   // the data is 32bit floats
-        var normalize = false; // don't normalize the data
-        var stride = 0;        // 0 = move forward size * sizeof(type) each iteration to get the next position
-        var offset = 0;        // start at the beginning of the buffer
-        gl.vertexAttribPointer(
-            positionLocation, size, type, normalize, stride, offset);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(geom.vertices), gl.STATIC_DRAW);
+        gl.vertexAttribPointer(positionLocation, 3, gl.FLOAT, false, 0, 0);
 
-        // Turn on the color attribute
+        // Color attribute from buffer
         gl.enableVertexAttribArray(colorLocation);
-        // Bind color buffer
         gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
-        setColors(geom.colors);
-        // Tell the attribute how to get data out of colorBuffer (ARRAY_BUFFER)
-        var size = 4;          // 3 components per iteration
-        var type = gl.FLOAT;   // the data is 32bit floating point values
-        var normalize = false; // normalize the data (convert from 0-255 to 0-1)
-        var stride = 0;        // 0 = move forward size * sizeof(type) each iteration to get the next position
-        var offset = 0;        // start at the beginning of the buffer
-        gl.vertexAttribPointer(
-            colorLocation, size, type, normalize, stride, offset);
-    }
-    // fill vertex buffer data
-    function setGeometry(pos) {
-        var positions = new Float32Array(pos);
-
-        var matrix = glMatrix.mat4.create();
-        glMatrix.mat4.rotateX(matrix, matrix, Math.PI);
-        glMatrix.mat4.translate(matrix, matrix, [-50, -75, -15]);
-
-        for (var i = 0; i < positions.length; i += 3) {
-            var vector = glMatrix.vec3.fromValues(
-                positions[i + 0],
-                positions[i + 1],
-                positions[i + 2]);
-            glMatrix.vec3.transformMat4(vector, vector, matrix);
-            positions[i + 0] = vector[0];
-            positions[i + 1] = vector[1];
-            positions[i + 2] = vector[2];
-        }
-
-        gl.bufferData(gl.ARRAY_BUFFER, positions, gl.STATIC_DRAW);
-        return positions;
-    }
-    // fill color buffer data
-    function setColors(col) {
-        var colors = new Float32Array(col);
-        gl.bufferData(gl.ARRAY_BUFFER, colors, gl.STATIC_DRAW);
+        gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(geom.colors), gl.STATIC_DRAW);
+        gl.vertexAttribPointer(colorLocation, 4, gl.FLOAT, false, 0, 0);
     }
 }
 

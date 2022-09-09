@@ -12,7 +12,7 @@ class ClothVertex {
     static st_force = [0.0, 0.0, 0.0]; // static force (i.e. gravity)
     static mass = 1.0;              // mass of every vertex
     static dissip = 0.002;
-    #is_pinned = false;                     // pined point does not move with forces
+    is_pinned = false;                     // pined point does not move with forces
 
     /*========= METHODS =========*/
     /** New ClothVertex object */
@@ -21,26 +21,28 @@ class ClothVertex {
         glMatrix.vec3.copy(this.pos, n_pos);
         this.#d_pos = glMatrix.vec3.create();
         this.force = glMatrix.vec3.create();
+        this.is_pinned = false;
     }
     /**
      * Moves vertex to a new position
      * @param {number[]} n_pos new position of a vertex
      * @param {boolean} pin_move false if not possible to move pinned vertex
      */
-    move(n_pos, pin_move = true) {
-        if (pin_move) {
-            if (!this.#is_pinned) {
-                glMatrix.vec3.sub(this.#d_pos, n_pos, this.pos);
-            }
-            glMatrix.vec3.copy(this.pos, n_pos);
+    move(n_pos) {
+        if (this.is_pinned) {
+            glMatrix.vec3.zero(this.#d_pos);
         }
+        else {
+            glMatrix.vec3.sub(this.#d_pos, n_pos, this.pos);
+        }
+        glMatrix.vec3.copy(this.pos, n_pos);
     }
     /**
      * Pins or unpins vertex
      * @param {boolean} pinned pin if true 
      */
     pin(pinned) {
-        this.#is_pinned = pinned;
+        this.is_pinned = pinned;
         glMatrix.vec3.zero(this.#d_pos);
     }
     /**
@@ -48,7 +50,7 @@ class ClothVertex {
      * @param {number} d_t time step 
      */
     update(d_t) {
-        if (!this.#is_pinned) {
+        if (!this.is_pinned) {
             var sum_force = glMatrix.vec3.create();
             glMatrix.vec3.add(sum_force, ClothVertex.st_force, this.force);
             var n_pos = glMatrix.vec3.create();
@@ -62,8 +64,8 @@ class ClothVertex {
             glMatrix.vec3.copy(this.#d_pos, n_pos);
             // save force module for coloring and empty force vector for further updates
             this.force_m = glMatrix.vec3.length(this.force);
-            glMatrix.vec3.zero(this.force);
         };
+        glMatrix.vec3.zero(this.force);
     }
 }
 
@@ -130,6 +132,7 @@ function ClothInit(num_vert, vert_arr, spr_arr, side, hook_c) {
     ClothSpring.hook = hook_c / num_vert ** 2 * (num_vert - 1);
     // step between vetrices
     var step = side / (num_vert - 1);
+    var side_translation = -side / 2;
     // total number of vertices
     var num_tot = num_vert ** 2;
     // vertex array iterator
@@ -137,7 +140,7 @@ function ClothInit(num_vert, vert_arr, spr_arr, side, hook_c) {
     for (let i = 0; i < num_vert; i++) {
         for (let j = 0; j < num_vert; j++) {
             // set vertex position
-            var pos = [i * step, 0, j * step];
+            var pos = [i * step + side_translation, 0, j * step + side_translation];
             // new vertex
             vert_arr[iter++] = new ClothVertex(pos);
         }
@@ -220,8 +223,8 @@ function get_line_geometry(v_ar, s_ar, n_v) {
     var colors = [];
     for (var i = 0; i < s_ar.length; i++) {
         var f = Math.abs(s_ar[i].d_len / s_ar[i].r_len - 1) * red_force;
-        var red = f > 2.0 ? 1.0 : f/2;
-        var green = f > 2.0 ? 0.0 : 1-f/2;
+        var red = f > 2.0 ? 1.0 : f / 2;
+        var green = f > 2.0 ? 0.0 : 1 - f / 2;
         colors.push(red, green, 0.0, 1.1);
         colors.push(red, green, 0.0, 1.1);
     }
